@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LeetCode Progress Tracker</title>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root{
+  --primary:#2563eb;
+  --primary-dark:#1e40af;
+  --bg:#f1f5f9;
+  --card:#ffffff;
+  --text:#0f172a;
+  --muted:#64748b;
+  --border:#e5e7eb;
+  --gold:#facc15;
+  --silver:#cbd5e1;
+  --bronze:#f59e0b;
+  --danger:#dc2626;
+}
+
+*{box-sizing:border-box}
+
+body{
+  font-family:'Inter',sans-serif;
+  background:linear-gradient(180deg,#f8fafc,#eef2ff);
+  padding:24px;
+  color:var(--text);
+}
+
+.container{
+  max-width:1300px;
+  margin:auto;
+}
+
+h1{
+  text-align:center;
+  font-size:28px;
+  font-weight:700;
+  margin-bottom:18px;
+}
+
+h2{
+  font-size:18px;
+  font-weight:600;
+  margin-bottom:10px;
+}
+
+.header{
+  background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+  color:white;
+  padding:20px;
+  border-radius:16px;
+  text-align:center;
+  margin-bottom:20px;
+  box-shadow:0 12px 30px rgba(0,0,0,.15);
+}
+
+.card{
+  background:var(--card);
+  border-radius:16px;
+  padding:18px;
+  margin-bottom:20px;
+  box-shadow:0 10px 25px rgba(0,0,0,.06);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+
+.card:hover{
+  transform:translateY(-2px);
+  box-shadow:0 14px 30px rgba(0,0,0,.08);
+}
+
+.controls{
+  text-align:center;
+}
+
+.controls input,
+.controls select{
+  min-width:180px;
+}
+
+input,select{
+  padding:10px 12px;
+  margin:6px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  font-size:14px;
+}
+
+button{
+  padding:10px 14px;
+  margin:6px;
+  border-radius:10px;
+  border:none;
+  background:var(--primary);
+  color:white;
+  font-weight:600;
+  cursor:pointer;
+  transition:background .2s, transform .1s;
+}
+
+button:hover{
+  background:var(--primary-dark);
+  transform:translateY(-1px);
+}
+
+button.secondary{background:#475569}
+button.secondary:hover{background:#334155}
+button.danger{background:var(--danger)}
+button.danger:hover{background:#b91c1c}
+
+table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  overflow:hidden;
+  border-radius:14px;
+}
+
+thead th{
+  background:#0f172a;
+  color:white;
+  font-size:13px;
+  position:sticky;
+  top:0;
+  z-index:1;
+}
+
+th,td{
+  padding:12px 10px;
+  border-bottom:1px solid var(--border);
+  text-align:center;
+  font-size:14px;
+}
+
+tbody tr:hover{
+  background:#f8fafc;
+}
+
+.plus{
+  color:#16a34a;
+  font-size:12px;
+  font-weight:600;
+  margin-left:4px;
+}
+
+.medal{
+  font-size:18px;
+}
+
+.rank-1{background:rgba(250,204,21,.15)}
+.rank-2{background:rgba(203,213,225,.2)}
+.rank-3{background:rgba(245,158,11,.15)}
+
+canvas{
+  width:100%;
+  background:white;
+  border-radius:14px;
+}
+
+ol{
+  padding-left:18px;
+}
+
+ol li{
+  margin:6px 0;
+  padding:8px 10px;
+  background:#f8fafc;
+  border-radius:10px;
+  font-size:14px;
+}
+
+.footer-note{
+  text-align:center;
+  font-size:13px;
+  color:var(--muted);
+  margin-top:20px;
+}
+</style>
+</head>
+
+
+<body>
+
+<div class="container">
+
+<div class="header">
+  <h1>LeetCode Progress Tracker</h1>
+  <div style="opacity:.9;font-size:14px">
+    Fast • Smart • Classroom-ready Analytics
+  </div>
+</div>
+
+<!-- CONTROLS -->
+<div class="card controls">
+  <select id="sectionSelect" onchange="loadSection()">
+    <option value="">Select Section</option>
+  </select>
+  <button onclick="addSection()">➕ Add Section</button>
+  <button class="danger" onclick="deleteSection()">🗑 Delete Section</button>
+  <br>
+
+  <input id="studentName" placeholder="Student Name">
+  <input id="usernameInput" placeholder="LeetCode Username / URL">
+  <button onclick="addStudent()">➕ Add Student</button>
+  <br>
+
+  <input type="file" id="csvFile" accept=".csv">
+  <button onclick="uploadCSV()">📂 Upload CSV</button>
+  <br>
+
+  <button onclick="refreshOncePerDay(true)">🔄 Fetch Today’s Progress</button>
+  <button class="secondary" onclick="syncToGoogleSheet()">☁ Sync to Google Sheet</button>
+</div>
+
+<!-- TABLE -->
+<div class="card">
+  <h2 id="currentSection"></h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Rank</th><th>Name</th><th>Username</th>
+        <th>Total</th><th>Easy</th><th>Medium</th><th>Hard</th>
+        <th>Profile</th><th>Remove</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<!-- GRAPH -->
+<div class="card">
+  <h2>📊 Weekly Progress</h2>
+  <canvas id="weeklyChart" height="180"></canvas>
+</div>
+
+<!-- LEADERBOARD -->
+<div class="card">
+  <h2>🏆 Weekly Leaderboard</h2>
+  <ol id="weeklyLeaderboard"></ol>
+</div>
+
+<div class="footer-note">
+  Built for fast classroom tracking • Local + Cloud Hybrid System
+</div>
+
+</div>
+
+<!-- 🔴 YOUR EXISTING SCRIPT GOES HERE (UNCHANGED) -->
+ <!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+/* FIREBASE CONFIG */
+firebase.initializeApp({
+  apiKey: "AIzaSyBwYEcSiKpWZgqtJFKfe48GQOd-ZC7PP0c",
+  authDomain: "leetcode-progress-tracke-18f71.firebaseapp.com",
+  projectId: "leetcode-progress-tracke-18f71"
+});
+const db=firebase.firestore();
+const CLOUD_KEY="leetcode-tracker-v1";
+
+/* STORAGE */
+function getData(){return JSON.parse(localStorage.getItem("sections"))||{}}
+function saveData(d){localStorage.setItem("sections",JSON.stringify(d))}
+
+/* CLOUD SYNC */
+async function pushToCloud(){
+  await db.collection("trackers").doc(CLOUD_KEY).set({
+    data:getData(),updatedAt:new Date()
+  });
+}
+async function pullFromCloud(){
+  const snap=await db.collection("trackers").doc(CLOUD_KEY).get();
+  if(!snap.exists) return;
+  if(Object.keys(getData()).length===0){
+    saveData(snap.data().data);
+    loadSectionDropdown();loadSection();
+  }
+}
+
+/* WEEK HELPERS */
+function getWeekKey(d=new Date()){
+  const j=new Date(d.getFullYear(),0,1);
+  return `${d.getFullYear()}-W${Math.ceil((((d-j)/86400000)+j.getDay()+1)/7)}`;
+}
+function getPreviousWeekKey(){const d=new Date();d.setDate(d.getDate()-7);return getWeekKey(d)}
+
+/* SECTION */
+function loadSectionDropdown(){
+  const sel=sectionSelect;sel.innerHTML='<option value="">Select Section</option>';
+  Object.keys(getData()).forEach(s=>{
+    sel.innerHTML+=`<option>${s}</option>`;
+  });
+  if(localStorage.lastSection) sel.value=localStorage.lastSection;
+}
+function addSection(){
+  const s=prompt("Enter Section Name"); if(!s) return;
+  const d=getData(); if(d[s]) return alert("Exists");
+  d[s]={lastFetched:null,students:[]};
+  saveData(d);pushToCloud();loadSectionDropdown();
+}
+function deleteSection(){
+  const s=sectionSelect.value;if(!s) return;
+  if(!confirm(`Delete section ${s}?`)) return;
+  const d=getData(); delete d[s];
+  saveData(d);pushToCloud();
+  sectionSelect.value="";tableBody.innerHTML="";
+  loadSectionDropdown();
+}
+
+/* LOAD */
+function loadSection(){
+  const s=sectionSelect.value;if(!s) return;
+  localStorage.lastSection=s;
+  currentSection.innerText="Section: "+s;
+  tableBody.innerHTML="";
+  getData()[s].students.forEach(renderRow);
+  rankTable(); drawWeeklyGraph(); renderWeeklyLeaderboard();
+}
+
+/* STUDENTS */
+function addStudent(){
+  const s=sectionSelect.value;if(!s) return;
+  let u=usernameInput.value.trim().replace("https://leetcode.com/","").replace(/\//g,"");
+  const n=studentName.value.trim();
+  if(!n||!u) return;
+  const d=getData();
+  if(d[s].students.some(x=>x.username===u)) return;
+  d[s].students.push({name:n,username:u,stats:{total:0,easy:0,medium:0,hard:0},weekly:{}});
+  saveData(d);pushToCloud();loadSection();
+}
+function removeStudent(u){
+  const section = sectionSelect.value;
+  if (!section) return;
+
+  const normalized = u.trim().toLowerCase();
+  const data = getData();
+
+  const before = data[section].students.length;
+
+  data[section].students = data[section].students.filter(
+    s => s.username.trim().toLowerCase() !== normalized
+  );
+
+  const after = data[section].students.length;
+
+  if (before === after) {
+    console.warn("Delete failed: username not found", normalized);
+  }
+
+  saveData(data);
+  pushToCloud();
+  loadSection();
+}
+
+
+/* CSV */
+function uploadCSV(){
+  const f=csvFile.files[0];const s=sectionSelect.value;if(!f||!s) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    const d=getData();
+    e.target.result.split(/\r?\n/).forEach((l,i)=>{
+      if(i===0||!l) return;
+      let[n,u]=l.split(","); if(!n||!u) return;
+      u=u.trim().replace("https://leetcode.com/","").replace(/\//g,"");
+      if(!d[s].students.some(x=>x.username===u))
+        d[s].students.push({name:n.trim(),username:u,stats:{total:0,easy:0,medium:0,hard:0},weekly:{}});
+    });
+    saveData(d);pushToCloud();loadSection();
+  };
+  r.readAsText(f);
+}
+
+/* RENDER */
+function getMedal(r){return r==1?"🥇":r==2?"🥈":r==3?"🥉":""}
+function renderRow(st){
+  const prev = getPreviousWeekKey();
+  const plus = st.stats.total - (st.weekly?.[prev] || st.stats.total);
+
+  const tr = document.createElement("tr");
+  tr.dataset.total = st.stats.total;
+
+  // 🔴 Inactive student highlight
+  if (isInactive(st)) {
+    tr.style.background = "#fee2e2";
+  }
+
+  tr.innerHTML = `
+    <td></td>
+    <td></td>
+    <td>
+      <a href="#" onclick="openProfile('${st.username}')">
+        ${st.name}
+      </a>
+      <div style="font-size:12px;color:#64748b;margin-top:4px">
+        ${getBadges(st).join(" ")}
+      </div>
+    </td>
+    <td>${st.username}</td>
+    <td>
+      ${st.stats.total}
+      ${plus > 0 ? `<span class="plus">(+${plus})</span>` : ""}
+    </td>
+    <td>${st.stats.easy}</td>
+    <td>${st.stats.medium}</td>
+    <td>${st.stats.hard}</td>
+    <td>
+      <a href="https://leetcode.com/${st.username}" target="_blank">Visit</a>
+    </td>
+    <td>
+      <button class="danger" onclick="removeStudentById('${st.id}')">❌</button>
+
+    </td>
+  `;
+
+  tableBody.appendChild(tr);
+}
+
+function rankTable(){
+  [...tableBody.rows].sort((a,b)=>b.dataset.total-a.dataset.total)
+  .forEach((r,i)=>{
+    r.children[0].innerText=i+1;
+    r.children[1].innerHTML=`${i+1} <span class="medal">${getMedal(i+1)}</span>`;
+    tableBody.appendChild(r);
+  });
+}
+
+/* FETCH */
+const API="https://leetcode-stats-api.herokuapp.com/";
+async function refreshOncePerDay(force){
+  const s=sectionSelect.value;const d=getData();
+  const today=new Date().toISOString().split("T")[0];
+  if(!force && d[s].lastFetched===today) return;
+  for (let st of d[s].students) {
+  if (!force && st.stats.total > 0) continue;
+
+  const j = await (await fetch(API + st.username)).json();
+  if (j.status === "success") {
+    st.stats = {
+      total: j.totalSolved,
+      easy: j.easySolved,
+      medium: j.mediumSolved,
+      hard: j.hardSolved
+    };
+    st.weekly[getWeekKey()] = j.totalSolved;
+    st.lastActive = new Date().toISOString();
+  }
+}
+
+  d[s].lastFetched=today;
+  saveData(d);pushToCloud();loadSection();
+}
+
+/* WEEKLY GRAPH */
+function drawWeeklyGraph(){
+  const s=sectionSelect.value;if(!s) return;
+  const ctx=weeklyChart.getContext("2d");
+  ctx.clearRect(0,0,800,180);
+  const weeks={};
+  getData()[s].students.forEach(st=>{
+    for(let w in st.weekly) weeks[w]=(weeks[w]||0)+st.weekly[w];
+  });
+  const k=Object.keys(weeks).slice(-4);
+  const v=k.map(x=>weeks[x]); const max=Math.max(...v,1);
+  k.forEach((w,i)=>{
+    const h=(v[i]/max)*120;
+    ctx.fillStyle="#2563eb";
+    ctx.fillRect(80+i*160,150-h,80,h);
+    ctx.fillText(w,70+i*160,170);
+  });
+}
+
+/* WEEKLY LEADERBOARD */
+function renderWeeklyLeaderboard(){
+  const prev=getPreviousWeekKey(),cur=getWeekKey();
+  const scores=[];
+  Object.values(getData()).forEach(sec=>{
+    sec.students.forEach(s=>{
+      const diff=(s.weekly?.[cur]||s.stats.total)-(s.weekly?.[prev]||0);
+      if(diff>0) scores.push({name:s.name,solved:diff});
+    });
+  });
+  scores.sort((a,b)=>b.solved-a.solved);
+  weeklyLeaderboard.innerHTML="";
+  scores.slice(0,10).forEach((s,i)=>{
+    weeklyLeaderboard.innerHTML+=`<li>${getMedal(i+1)} <b>${s.name}</b> +${s.solved}</li>`;
+  });
+}
+
+/* GOOGLE SHEET */
+const SHEET_URL="https://script.google.com/macros/s/AKfycbyq5l8fEre2ly4_A78GQgCJt-KzezRzvHcEw8OYg71Y1qEl6KRuNa4F_7Z87V51JPOgDA/exec";
+function syncToGoogleSheet(){
+  const s=sectionSelect.value;if(!s) return;
+  [...tableBody.rows].forEach(r=>{
+    fetch(SHEET_URL,{method:"POST",body:JSON.stringify({
+      section:s,rank:r.children[1].innerText,
+      name:r.children[2].innerText,username:r.children[3].innerText,
+      total:r.children[4].innerText,easy:r.children[5].innerText,
+      medium:r.children[6].innerText,hard:r.children[7].innerText
+    })});
+  });
+}
+
+
+function removeStudentById(id) {
+  const section = sectionSelect.value;
+  if (!section) return;
+
+  const data = getData();
+
+  data[section].students = data[section].students.filter(
+    st => st.id !== id
+  );
+
+  saveData(data);
+  pushToCloud();
+  loadSection();
+}
+
+
+/* INIT */
+window.onload=()=>{
+  migrateAddIds(); 
+  loadSectionDropdown();
+  loadSection();
+  pullFromCloud();
+};
+
+function openProfile(username) {
+  const data = getData();
+  let student;
+
+  Object.values(data).forEach(sec => {
+    sec.students.forEach(s => {
+      if (s.username === username) student = s;
+    });
+  });
+
+  if (!student) return;
+
+  pmName.innerText = student.name;
+  pmUsername.innerText = student.username;
+  pmTotal.innerText = student.stats.total;
+  pmLevels.innerText =
+    `${student.stats.easy} / ${student.stats.medium} / ${student.stats.hard}`;
+
+  pmLastActive.innerText = formatLastActive(student.lastActive, student);
+
+
+
+  pmBadges.innerHTML = getBadges(student).join(" ");
+
+  profileModal.style.display = "flex";
+}
+
+function closeProfile() {
+  profileModal.style.display = "none";
+}
+
+function isInactive(student) {
+  const prevWeek = getPreviousWeekKey();
+  const currWeek = getWeekKey();
+
+  const prev = student.weekly?.[prevWeek] || 0;
+  const curr = student.weekly?.[currWeek] || student.stats.total;
+
+  return curr - prev === 0;
+}
+
+function getBadges(student) {
+  const badges = [];
+
+  if (student.stats.easy >= 20)
+    badges.push("🧠 20 Easy");
+
+  if (student.stats.hard >= 1)
+    badges.push("⚔️ First Hard");
+
+  const weeks = Object.keys(student.weekly || {});
+  if (weeks.length >= 2)
+    badges.push("🔥 7-Day Streak");
+
+  if (student.weekly?.[getWeekKey()] === student.stats.total)
+    badges.push("📅 Daily Streak");
+
+  return badges;
+}
+
+function formatLastActive(dateStr, student) {
+  // ✅ If we have real timestamp
+  if (dateStr) {
+    const last = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.floor((now - last) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return last.toDateString();
+  }
+
+  // 🔁 Fallback: infer from weekly progress
+  const weeks = Object.keys(student.weekly || {});
+  if (weeks.length > 0) {
+    return "Active recently";
+  }
+
+  return "Never";
+}
+
+function migrateAddIds() {
+  const data = getData();
+  let updated = false;
+
+  Object.values(data).forEach(section => {
+    section.students.forEach(st => {
+      if (!st.id) {
+        st.id = crypto.randomUUID();
+        updated = true;
+      }
+    });
+  });
+
+  if (updated) {
+    saveData(data);
+    pushToCloud();
+    console.log("Migration complete: IDs added");
+  } else {
+    console.log("Migration not needed");
+  }
+}
+
+
+
+
+
+
+
+</script>
+
+<div id="profileModal" style="
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.5);
+  z-index:1000;
+  align-items:center;
+  justify-content:center;
+">
+  <div style="
+    background:white;
+    width:420px;
+    border-radius:14px;
+    padding:20px;
+  ">
+    <h2 id="pmName"></h2>
+    <p><b>Username:</b> <span id="pmUsername"></span></p>
+    <p><b>Total:</b> <span id="pmTotal"></span></p>
+    <p><b>Easy / Medium / Hard:</b>
+      <span id="pmLevels"></span>
+    </p>
+    <p><b>Last Active:</b> <span id="pmLastActive"></span></p>
+
+    <h3>🏅 Badges</h3>
+    <div id="pmBadges"></div>
+
+    <br>
+    <button onclick="closeProfile()">Close</button>
+  </div>
+</div>
+
+
+
+</body>
+</html>
