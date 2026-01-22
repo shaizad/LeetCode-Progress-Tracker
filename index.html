@@ -218,11 +218,18 @@ ol li{
 <!-- TABLE -->
 <div class="card">
   <h2 id="currentSection"></h2>
+<div id="studentCount" style="
+  text-align:center;
+  margin-bottom:12px;
+  font-size:14px;
+  color:#475569;
+  font-weight:600;
+"></div>
   <table>
     <thead>
       <tr>
         <th>#</th><th>Rank</th><th>Name</th><th>Username</th>
-        <th>Total</th><th>Easy</th><th>Medium</th><th>Hard</th>
+        <th>Total</th> <th>Recent Solved</th><th>Easy</th><th>Medium</th><th>Hard</th>
         <th>Profile</th><th>Remove</th>
       </tr>
     </thead>
@@ -314,13 +321,23 @@ function deleteSection(){
 
 /* LOAD */
 function loadSection(){
-  const s=sectionSelect.value;if(!s) return;
-  localStorage.lastSection=s;
-  currentSection.innerText="Section: "+s;
-  tableBody.innerHTML="";
-  getData()[s].students.forEach(renderRow);
-  rankTable(); drawWeeklyGraph(); renderWeeklyLeaderboard();
+  const s = sectionSelect.value;
+  if (!s) return;
+
+  localStorage.lastSection = s;
+  currentSection.innerText = "Section: " + s;
+
+  const students = getData()[s].students || [];
+  studentCount.innerText = "Total Students: " + students.length;
+
+  tableBody.innerHTML = "";
+  students.forEach(renderRow);
+
+  rankTable();
+  drawWeeklyGraph();
+  renderWeeklyLeaderboard();
 }
+
 
 /* STUDENTS */
 function addStudent(){
@@ -330,7 +347,19 @@ function addStudent(){
   if(!n||!u) return;
   const d=getData();
   if(d[s].students.some(x=>x.username===u)) return;
-  d[s].students.push({name:n,username:u,stats:{total:0,easy:0,medium:0,hard:0},weekly:{}});
+  d[s].students.push({
+  id: crypto.randomUUID(),      // 🔑 unique ID
+  name: n,
+  username: u,
+
+  stats: { total: 0, easy: 0, medium: 0, hard: 0 },
+  weekly: {},
+
+  lastTotal: 0,                // ✅ needed for +X
+  recentSolved: 0,             // ✅ will show +X
+  lastActive: null             // (optional, but useful)
+});
+
   saveData(d);pushToCloud();loadSection();
 }
 function removeStudent(u){
@@ -369,7 +398,18 @@ function uploadCSV(){
       let[n,u]=l.split(","); if(!n||!u) return;
       u=u.trim().replace("https://leetcode.com/","").replace(/\//g,"");
       if(!d[s].students.some(x=>x.username===u))
-        d[s].students.push({name:n.trim(),username:u,stats:{total:0,easy:0,medium:0,hard:0},weekly:{}});
+        d[s].students.push({
+  id: crypto.randomUUID(),
+  name:n.trim(),
+  username:u,
+  stats:{ total:0, easy:0, medium:0, hard:0 },
+  weekly:{},
+  lastActive: null,
+
+  lastTotal: 0,        // ✅ ADD THIS
+  recentSolved: 0      // ✅ ADD THIS
+});
+
     });
     saveData(d);pushToCloud();loadSection();
   };
@@ -406,6 +446,12 @@ function renderRow(st){
       ${st.stats.total}
       ${plus > 0 ? `<span class="plus">(+${plus})</span>` : ""}
     </td>
+    <td>
+  ${st.recentSolved > 0 
+    ? `<span class="plus">+${st.recentSolved}</span>` 
+    : `<span style="color:#94a3b8">0</span>`}
+</td>
+
     <td>${st.stats.easy}</td>
     <td>${st.stats.medium}</td>
     <td>${st.stats.hard}</td>
@@ -432,29 +478,51 @@ function rankTable(){
 
 /* FETCH */
 const API="https://leetcode-stats-api.herokuapp.com/";
-async function refreshOncePerDay(force){
-  const s=sectionSelect.value;const d=getData();
-  const today=new Date().toISOString().split("T")[0];
-  if(!force && d[s].lastFetched===today) return;
-  for (let st of d[s].students) {
-  if (!force && st.stats.total > 0) continue;
+async function refreshOncePerDay(force) {
+  const s = sectionSelect.value;
+  if (!s) return;
 
-  const j = await (await fetch(API + st.username)).json();
-  if (j.status === "success") {
-    st.stats = {
-      total: j.totalSolved,
-      easy: j.easySolved,
-      medium: j.mediumSolved,
-      hard: j.hardSolved
-    };
-    st.weekly[getWeekKey()] = j.totalSolved;
-    st.lastActive = new Date().toISOString();
+  const d = getData();
+  const today = new Date().toISOString().split("T")[0];
+
+  if (!force && d[s].lastFetched === today) {
+    alert("Already fetched today");
+    return;
   }
+
+  for (let st of d[s].students) {
+    const res = await fetch(API + st.username);
+    const j = await res.json();
+
+    if (j.status === "success") {
+      const newTotal = j.totalSolved;
+      const prevTotal =
+        st.lastTotal ?? st.stats?.total ?? 0;
+
+      // ✅ calculate recent solved
+      st.recentSolved = Math.max(0, newTotal - prevTotal);
+      st.lastTotal = newTotal;
+
+      // update stats
+      st.stats = {
+        total: newTotal,
+        easy: j.easySolved,
+        medium: j.mediumSolved,
+        hard: j.hardSolved
+      };
+
+      // weekly + last active
+      st.weekly[getWeekKey()] = newTotal;
+      st.lastActive = new Date().toISOString();
+    }
+  }
+
+  d[s].lastFetched = today;
+  saveData(d);
+  pushToCloud();
+  loadSection();
 }
 
-  d[s].lastFetched=today;
-  saveData(d);pushToCloud();loadSection();
-}
 
 /* WEEKLY GRAPH */
 function drawWeeklyGraph(){
@@ -493,18 +561,35 @@ function renderWeeklyLeaderboard(){
 }
 
 /* GOOGLE SHEET */
-const SHEET_URL="https://script.google.com/macros/s/AKfycbyq5l8fEre2ly4_A78GQgCJt-KzezRzvHcEw8OYg71Y1qEl6KRuNa4F_7Z87V51JPOgDA/exec";
-function syncToGoogleSheet(){
-  const s=sectionSelect.value;if(!s) return;
-  [...tableBody.rows].forEach(r=>{
-    fetch(SHEET_URL,{method:"POST",body:JSON.stringify({
-      section:s,rank:r.children[1].innerText,
-      name:r.children[2].innerText,username:r.children[3].innerText,
-      total:r.children[4].innerText,easy:r.children[5].innerText,
-      medium:r.children[6].innerText,hard:r.children[7].innerText
-    })});
-  });
+const SHEET_URL="https://script.google.com/macros/s/AKfycbxB65UXM35T3G9JooQPvnXg8gfQrUpxSkd-uH1bXAnGmdDbWFFEDmU6_6Oq0Ufd7dC4hQ/exec";
+function syncToGoogleSheet() {
+  const s = sectionSelect.value;
+  if (!s) return alert("Select section");
+
+  const data = getData();
+  const students = data[s].students.map(st => ({
+    name: st.name,
+    username: st.username,
+    total: st.stats.total,
+    recentSolved: st.recentSolved || 0,
+    easy: st.stats.easy,
+    medium: st.stats.medium,
+    hard: st.stats.hard,
+    lastActive: st.lastActive || ""
+  }));
+
+  fetch(SHEET_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      section: s,
+      students: students
+    })
+  })
+  .then(() => alert("Google Sheet synced successfully"))
+  .catch(() => alert("Sync failed"));
 }
+
+
 
 
 function removeStudentById(id) {
@@ -526,6 +611,7 @@ function removeStudentById(id) {
 /* INIT */
 window.onload=()=>{
   migrateAddIds(); 
+  migrateRecentSolved(); 
   loadSectionDropdown();
   loadSection();
   pullFromCloud();
@@ -634,6 +720,28 @@ function migrateAddIds() {
     console.log("Migration not needed");
   }
 }
+
+
+function migrateRecentSolved() {
+  const data = getData();
+  let updated = false;
+
+  Object.values(data).forEach(sec => {
+    sec.students.forEach(st => {
+      if (st.lastTotal === undefined) {
+        st.lastTotal = st.stats?.total || 0;
+        st.recentSolved = 0;
+        updated = true;
+      }
+    });
+  });
+
+  if (updated) {
+    saveData(data);
+    pushToCloud();
+  }
+}
+
 
 
 
